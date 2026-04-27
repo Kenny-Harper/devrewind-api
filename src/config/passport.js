@@ -16,6 +16,24 @@
  * - deserialize = how we turn that ID back into a full user on each request
  */
 
+/*
+ * AUTHENTICATION FLOW RECAP (plain English)
+ *
+ * This is the authentication brain of DevRewind.
+ *
+ * When someone visits DevRewind and clicks "Login with GitHub", your Express
+ * server redirects them to GitHub. GitHub asks the user for permission, and
+ * when they say yes, GitHub sends them back to your app with an access token.
+ *
+ * This file catches that moment:
+ * - Checks if the user already exists in your PostgreSQL database
+ * - If yes: updates their access token (it can change over time)
+ * - If no: creates a brand new user row in the database
+ *
+ * Every future request then uses the session to remember who they are,
+ * so they don't have to log in again on every page visit.
+ */
+
 // Import passport - the authentication library
 const passport = require('passport');
 
