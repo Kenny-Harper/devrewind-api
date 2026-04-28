@@ -19,5 +19,8 @@ Node.js/Express backend for DevRewind — turns GitHub activity into a shareable
 - Add .env with GitHub OAuth credentials
 - npm run dev
 
+## Live
+https://devrewind.netlify.app
+
 ## Related
 - [devrewind-client](https://github.com/Kenny-Harper/devrewind-client)
