@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const passport = require('passport');
+const pool = require('../db');
 
 router.get('/github', passport.authenticate('github', {
   scope: ['user:email', 'read:user', 'repo']
@@ -10,19 +11,18 @@ router.get('/github/callback',
   passport.authenticate('github', { failureRedirect: '/auth/failed' }),
   async (req, res) => {
     try {
-      const pool = require('../db');
-      const accessToken = req.user.access_token;
-      const userId = req.user.id;
-      const username = req.user.username;
-
-      // Generate stats inline so we don't need a session
-      const statsController = require('../controllers/statsController');
-      req.user = { id: userId, access_token: accessToken, username };
-      
-      res.redirect(`${process.env.CLIENT_URL}/wrapped/${username}`);
+      const { getGitHubStats } = require('../controllers/statsController');
+      await new Promise((resolve, reject) => {
+        const fakeRes = {
+          json: resolve,
+          status: () => ({ json: reject })
+        };
+        getGitHubStats(req, fakeRes);
+      });
     } catch (err) {
-      res.redirect(`${process.env.CLIENT_URL}?error=true`);
+      console.error('Stats generation failed:', err);
     }
+    res.redirect(`${process.env.CLIENT_URL}/wrapped/${req.user.username}`);
   }
 );
 
