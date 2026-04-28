@@ -8,27 +8,21 @@
  * We fetch:
  * - Their repositories (languages, stars, descriptions)
  * - Their contribution activity (commits over time)
- * - Their pinned/top repositories to show as project cards
+ * - Their pinned repositories with README images to show as project cards
  *
- * This data gets processed and stored in our database so we can
- * generate their DevRewind card without hitting GitHub's API every time.
- *
- * KEY CONCEPTS:
- * - Access token = proves to GitHub we have permission to read this user's data
- * - Rate limiting = GitHub only allows a certain number of API calls per hour
- * - GraphQL      = GitHub's advanced API that lets us fetch exactly what we need
+ * Image priority for each project card:
+ * 1. First image found in the repo's README (markdown or HTML format)
+ * 2. Screenshot of the live deployed URL via microlink
+ * 3. Generic GitHub card as fallback
  */
 
 const pool = require('../db');
 
-// Fetch a user's GitHub stats using their stored access token
 const getGitHubStats = async (req, res) => {
   try {
-    // Get the logged in user from the session
     const userId = req.user.id;
     const accessToken = req.user.access_token;
 
-    // Fetch user's repositories from GitHub API
     const reposResponse = await fetch('https://api.github.com/user/repos?per_page=100&sort=updated', {
       headers: {
         'Authorization': `Bearer ${accessToken}`,
@@ -38,7 +32,6 @@ const getGitHubStats = async (req, res) => {
 
     const repos = await reposResponse.json();
 
-    // Calculate language breakdown across all repos
     const languageCount = {};
     repos.forEach(repo => {
       if (repo.language) {
@@ -46,13 +39,11 @@ const getGitHubStats = async (req, res) => {
       }
     });
 
-    // Sort languages by frequency
     const topLanguages = Object.entries(languageCount)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 5)
       .map(([language, count]) => ({ language, count }));
 
-    // Fetch contribution data using GitHub GraphQL API
     const graphqlResponse = await fetch('https://api.github.com/graphql', {
       method: 'POST',
       headers: {
@@ -87,6 +78,11 @@ const getGitHubStats = async (req, res) => {
                       name
                     }
                     homepageUrl
+                    object(expression: "HEAD:README.md") {
+                      ... on Blob {
+                        text
+                      }
+                    }
                   }
                 }
               }
@@ -98,13 +94,36 @@ const getGitHubStats = async (req, res) => {
 
     const graphqlData = await graphqlResponse.json();
     const contributions = graphqlData.data.viewer.contributionsCollection;
-    const pinnedRepos = graphqlData.data.viewer.pinnedItems.nodes;
 
-    // Calculate best streak from contribution calendar
+    const pinnedRepos = graphqlData.data.viewer.pinnedItems.nodes.map(repo => {
+      let readmeImage = null
+
+      if (repo.object?.text) {
+        // Match markdown images: ![alt](url)
+        // OR HTML img tags: <img src="url" ...>
+        const imageMatch = repo.object.text.match(
+          /!\[.*?\]\((https?:\/\/[^\s)]+)\)|src="(https?:\/\/[^\s"]+)"/
+        )
+        const readmeImageUrl = imageMatch ? (imageMatch[1] || imageMatch[2]) : null
+        if (readmeImageUrl) {
+          readmeImage = readmeImageUrl
+        }
+      }
+
+      return {
+        name: repo.name,
+        description: repo.description,
+        url: repo.url,
+        homepageUrl: repo.homepageUrl,
+        stargazerCount: repo.stargazerCount,
+        primaryLanguage: repo.primaryLanguage,
+        readmeImage
+      }
+    });
+
     const allDays = contributions.contributionCalendar.weeks
       .flatMap(week => week.contributionDays);
 
-    let currentStreak = 0;
     let bestStreak = 0;
     let tempStreak = 0;
 
@@ -117,7 +136,6 @@ const getGitHubStats = async (req, res) => {
       }
     });
 
-    // Find most active day of the week
     const dayTotals = [0, 0, 0, 0, 0, 0, 0];
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -128,7 +146,6 @@ const getGitHubStats = async (req, res) => {
 
     const mostActiveDay = dayNames[dayTotals.indexOf(Math.max(...dayTotals))];
 
-    // Build the stats object
     const stats = {
       totalContributions: contributions.contributionCalendar.totalContributions,
       totalCommits: contributions.totalCommitContributions,
@@ -141,7 +158,6 @@ const getGitHubStats = async (req, res) => {
       contributionCalendar: contributions.contributionCalendar.weeks
     };
 
-    // Save stats to database
     await pool.query(
       `INSERT INTO user_stats (user_id, stats_data, generated_at)
        VALUES ($1, $2, NOW())
@@ -158,7 +174,6 @@ const getGitHubStats = async (req, res) => {
   }
 };
 
-// Get stored stats for a user's public profile page
 const getPublicStats = async (req, res) => {
   try {
     const { username } = req.params;
