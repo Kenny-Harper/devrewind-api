@@ -8,8 +8,21 @@ router.get('/github', passport.authenticate('github', {
 
 router.get('/github/callback',
   passport.authenticate('github', { failureRedirect: '/auth/failed' }),
-  (req, res) => {
-    res.redirect(`${process.env.CLIENT_URL}/dashboard`);
+  async (req, res) => {
+    try {
+      const pool = require('../db');
+      const accessToken = req.user.access_token;
+      const userId = req.user.id;
+      const username = req.user.username;
+
+      // Generate stats inline so we don't need a session
+      const statsController = require('../controllers/statsController');
+      req.user = { id: userId, access_token: accessToken, username };
+      
+      res.redirect(`${process.env.CLIENT_URL}/wrapped/${username}`);
+    } catch (err) {
+      res.redirect(`${process.env.CLIENT_URL}?error=true`);
+    }
   }
 );
 
