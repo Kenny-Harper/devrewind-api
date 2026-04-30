@@ -14,6 +14,11 @@
  * 1. First image found in the repo's README (markdown or HTML format)
  * 2. Screenshot of the live deployed URL via microlink
  * 3. Generic GitHub card as fallback
+ *
+ * Live Demo URL priority:
+ * 1. Parsed from ## Live Demo section in README
+ * 2. homepageUrl from GitHub repo settings
+ * 3. Nothing shown if neither exists
  */
 
 const pool = require('../db');
@@ -96,17 +101,26 @@ const getGitHubStats = async (req, res) => {
     const contributions = graphqlData.data.viewer.contributionsCollection;
 
     const pinnedRepos = graphqlData.data.viewer.pinnedItems.nodes.map(repo => {
-      let readmeImage = null
+      let readmeImage = null;
+      let readmeLiveUrl = null;
 
       if (repo.object?.text) {
         // Match markdown images: ![alt](url)
         // OR HTML img tags: <img src="url" ...>
         const imageMatch = repo.object.text.match(
           /!\[.*?\]\((https?:\/\/[^\s)]+)\)|src="(https?:\/\/[^\s"]+)"/
-        )
-        const readmeImageUrl = imageMatch ? (imageMatch[1] || imageMatch[2]) : null
+        );
+        const readmeImageUrl = imageMatch ? (imageMatch[1] || imageMatch[2]) : null;
         if (readmeImageUrl) {
-          readmeImage = readmeImageUrl
+          readmeImage = readmeImageUrl;
+        }
+
+        // Match ## Live Demo (or # Live Demo) followed by a URL on the next line(s)
+        const liveDemoMatch = repo.object.text.match(
+          /##?\s*live\s*demo\s*\n+(https?:\/\/[^\s\n]+)/i
+        );
+        if (liveDemoMatch) {
+          readmeLiveUrl = liveDemoMatch[1].trim();
         }
       }
 
@@ -117,8 +131,9 @@ const getGitHubStats = async (req, res) => {
         homepageUrl: repo.homepageUrl,
         stargazerCount: repo.stargazerCount,
         primaryLanguage: repo.primaryLanguage,
-        readmeImage
-      }
+        readmeImage,
+        readmeLiveUrl
+      };
     });
 
     const allDays = contributions.contributionCalendar.weeks

@@ -37,12 +37,16 @@ router.get('/github/callback',
 
       const pinnedRepos = graphqlData.data.viewer.pinnedItems.nodes.map(repo => {
         let readmeImage = null;
+        let readmeLiveUrl = null;
         if (repo.object?.text) {
           const imageMatch = repo.object.text.match(/!\[.*?\]\((https?:\/\/[^\s)]+)\)|src="(https?:\/\/[^\s"]+)"/);
           const readmeImageUrl = imageMatch ? (imageMatch[1] || imageMatch[2]) : null;
           if (readmeImageUrl) readmeImage = readmeImageUrl;
+
+          const liveDemoMatch = repo.object.text.match(/##?\s*live\s*demo\s*\n+(https?:\/\/[^\s\n]+)/i);
+          if (liveDemoMatch) readmeLiveUrl = liveDemoMatch[1].trim();
         }
-        return { name: repo.name, description: repo.description, url: repo.url, homepageUrl: repo.homepageUrl, stargazerCount: repo.stargazerCount, primaryLanguage: repo.primaryLanguage, readmeImage };
+        return { name: repo.name, description: repo.description, url: repo.url, homepageUrl: repo.homepageUrl, stargazerCount: repo.stargazerCount, primaryLanguage: repo.primaryLanguage, readmeImage, readmeLiveUrl };
       });
 
       const allDays = contributions.contributionCalendar.weeks.flatMap(week => week.contributionDays);
@@ -81,7 +85,9 @@ router.get('/failed', (req, res) => {
 });
 
 router.get('/logout', (req, res) => {
-  req.logout(() => { res.json({ message: 'Logged out successfully' }); });
+  req.logout(() => {
+    res.redirect(process.env.CLIENT_URL);
+  });
 });
 
 router.get('/me', (req, res) => {
