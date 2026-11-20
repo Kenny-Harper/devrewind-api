@@ -41,14 +41,17 @@ npm install
 npm run dev
 ```
 
-Create a `.env` file with your GitHub OAuth credentials and database details:
+Create a `.env` file:
 
 ```
 GITHUB_CLIENT_ID=
 GITHUB_CLIENT_SECRET=
+BASE_URL=http://localhost:3000
 DATABASE_URL=
 SESSION_SECRET=
 CLIENT_URL=http://localhost:5173
+PORT=3000
+NODE_ENV=development
 ```
 
 Register a GitHub OAuth app with the callback URL `http://localhost:3000/auth/github/callback`.
